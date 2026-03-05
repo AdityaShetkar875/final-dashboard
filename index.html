@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AllSAFE | Enterprise Defense Matrix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;500;700&display=swap');
+        
+        /* --- THEME VARIABLES --- */
+        :root {
+            --primary: #00f2ff;
+            --primary-glow: rgba(0, 242, 255, 0.4);
+            --bg-base: #02050a;
+            --panel-bg: rgba(2, 10, 20, 0.6);
+            --border-color: rgba(0, 242, 255, 0.2);
+            --text-main: #e0fbfc;
+            --grid-line: rgba(0, 242, 255, 0.05);
+        }
+
+        .theme-dev {
+            --primary: #ff0040;
+            --primary-glow: rgba(255, 0, 64, 0.4);
+            --bg-base: #0f0205;
+            --panel-bg: rgba(20, 2, 5, 0.7);
+            --border-color: rgba(255, 0, 64, 0.3);
+            --text-main: #ffe0e0;
+            --grid-line: rgba(255, 0, 64, 0.05);
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'JetBrains Mono', monospace;
+            transition: background-color 0.8s ease, color 0.8s ease;
+            overflow-x: hidden;
+            background-image: 
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        
+        /* --- GLASS PANELS & UI --- */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .glass-panel:hover {
+            box-shadow: 0 0 30px var(--primary-glow), inset 0 0 10px var(--primary-glow);
+            border-color: var(--primary);
+            transform: translateY(-4px) scale(1.01);
+            z-index: 10;
+        }
+
+        /* --- TRUCK ANIMATION --- */
+        .packet-track { position: relative; width: 100%; height: 2px; background: rgba(255,255,255,0.1); margin: 30px 0; }
+        .firewall-line { position: absolute; left: 60%; top: -25px; bottom: -25px; width: 2px; background: var(--primary); box-shadow: 0 0 15px var(--primary); z-index: 10; transition: all 0.5s ease; }
+        
+        .packet {
+            position: absolute; top: -14px; font-size: 20px; z-index: 20;
+            text-shadow: 0 0 10px currentColor;
+        }
+        
+        @keyframes safePacket {
+            0% { left: 0; opacity: 1; }
+            90% { left: 100%; opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+
+        @keyframes blockPacket {
+            0% { left: 0; transform: rotate(0deg); }
+            55% { left: 58%; transform: rotate(0deg); }
+            60% { left: 60%; transform: rotate(-45deg) scale(1.5) translateY(-10px); color: #fff; text-shadow: 0 0 20px #fff; }
+            80% { left: 62%; transform: rotate(-90deg) scale(1) translateY(50px); opacity: 0; }
+            100% { left: 62%; opacity: 0; }
+        }
+
+        .anim-safe { animation: safePacket 2.5s linear forwards; color: #00ff88; }
+        .anim-block { animation: blockPacket 2s ease-out forwards; color: #ff0040; }
+
+        /* --- MAP DOT ANIMATION --- */
+        .map-dot {
+            position: absolute; width: 8px; height: 8px; background: var(--primary);
+            border-radius: 50%; box-shadow: 0 0 10px var(--primary);
+            transition: all 1s ease;
+        }
+        .map-ping {
+            position: absolute; width: 100%; height: 100%; border-radius: 50%;
+            border: 1px solid var(--primary); opacity: 0;
+            animation: ping 1.5s infinite;
+        }
+        @keyframes ping { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(4); opacity: 0; } }
+
+        /* --- SCROLLBAR --- */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
+
+        /* --- CRT SCANLINE EFFECT --- */
+        .scanlines {
+            position: fixed; top: 0; left: 0; w-full: h-full; pointer-events: none; z-index: 9999;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            opacity: 0.15;
+        }
+    </style>
+</head>
+<body id="app-body" class="p-4 md:p-6 min-h-screen">
+    <div class="scanlines"></div>
+
+    <nav class="max-w-[1600px] mx-auto flex justify-between items-center mb-8 border-b border-white/10 pb-4">
+        <div>
+            <h1 class="orbitron text-4xl font-black tracking-tighter" style="color: var(--primary)">All<span class="text-white">SAFE</span></h1>
+            <div class="flex items-center gap-2 text-[10px] text-gray-400 mt-1 uppercase tracking-widest">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                System Operational
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="toggleMode()" id="mode-btn" class="orbitron text-xs font-bold px-6 py-2 rounded border transition-all duration-300 hover:scale-105" 
+                style="border-color: var(--primary); background: rgba(0,0,0,0.5); color: var(--primary); box-shadow: 0 0 15px var(--primary-glow);">
+                <i class="fas fa-terminal mr-2"></i>ACTIVATE DEV MODE
+            </button>
+        </div>
+    </nav>
+
+    <div class="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel p-4 rounded-xl">
+            <span class="text-[10px] uppercase text-gray-500 font-bold">Inspect Target</span>
+            <div id="target-ip" class="text-xl font-bold font-mono mt-1">Initializing...</div>
+        </div>
+        <div class="glass-panel p-4 rounded-xl">
+            <span class="text-[10px] uppercase text-gray-500 font-bold">Ensemble Confidence</span>
+            <div id="mean-prob" class="text-2xl font-light mt-1" style="color: var(--primary)">--%</div>
+        </div>
+        <div class="glass-panel p-4 rounded-xl border-l-4 border-green-500">
+            <span class="text-[10px] uppercase text-gray-500 font-bold">Packets Allowed</span>
+            <div id="count-safe" class="text-2xl font-mono text-green-400">84,392</div>
+        </div>
+        <div class="glass-panel p-4 rounded-xl border-l-4 border-red-500">
+            <span class="text-[10px] uppercase text-gray-500 font-bold">Threats Neutralized</span>
+            <div id="count-blocked" class="text-2xl font-mono text-red-500">1,204</div>
+        </div>
+    </div>
+
+    <div class="max-w-[1600px] mx-auto glass-panel p-8 rounded-2xl mb-6 relative overflow-hidden">
+        <div class="absolute top-0 right-0 p-4 opacity-20 text-6xl font-black orbitron select-none pointer-events-none" style="color: var(--primary)">LIVE</div>
+        
+        <div class="flex justify-between items-end mb-8 relative z-10">
+            <div class="text-left">
+                <i class="fas fa-globe-americas text-4xl mb-2 text-gray-600"></i>
+                <div class="text-xs text-gray-400 uppercase tracking-[0.2em]">Public Internet</div>
+            </div>
+            <div class="text-center">
+                <h2 id="verdict-title" class="orbitron text-3xl font-bold uppercase tracking-widest mb-1 transition-colors duration-300">SCANNING</h2>
+                <p id="verdict-desc" class="text-xs font-mono text-gray-400">Monitoring Metadata Heuristics</p>
+            </div>
+            <div class="text-right">
+                <i class="fas fa-database text-4xl mb-2" style="color: var(--primary)"></i>
+                <div class="text-xs text-gray-400 uppercase tracking-[0.2em]">Secure Zone</div>
+            </div>
+        </div>
+        
+        <div class="packet-track">
+            <div class="firewall-line"></div>
+            <div id="packet-container"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-gray-500 uppercase font-mono mt-2">
+            <span>Entry Node</span>
+            <span style="color: var(--primary)">AllSAFE Matrix (Edge)</span>
+            <span>Internal VLAN</span>
+        </div>
+    </div>
+
+    <div class="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        
+        <div class="lg:col-span-3 glass-panel p-5 rounded-2xl flex flex-col">
+            <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest border-b border-gray-700 pb-2">
+                <i class="fas fa-vote-yea mr-2"></i>AI Consensus
+            </h3>
+            <div class="flex-grow relative h-48">
+                <canvas id="votingChart"></canvas>
+            </div>
+        </div>
+
+        <div class="lg:col-span-9 glass-panel p-5 rounded-2xl">
+            <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest border-b border-gray-700 pb-2 flex justify-between">
+                <span><i class="fas fa-chart-line mr-2"></i>Live Telemetry</span>
+                <span class="text-[10px] text-gray-500">Baseline (Dotted) vs Live (Solid)</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-48">
+                <div class="relative w-full h-full">
+                    <canvas id="jitterChart"></canvas> </div>
+                <div class="relative w-full h-full">
+                    <canvas id="packetChart"></canvas> </div>
+                <div class="relative w-full h-full">
+                    <canvas id="flowChart"></canvas> </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dev-sections" class="max-w-[1600px] mx-auto hidden opacity-0 transition-opacity duration-700">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            
+            <div class="glass-panel p-5 rounded-2xl lg:col-span-2 relative overflow-hidden group">
+                <h3 class="text-xs font-bold text-red-500 uppercase mb-4 tracking-widest">
+                    <i class="fas fa-map-marked-alt mr-2"></i>Geo-Political Origin Tracking
+                </h3>
+                <div class="w-full h-64 bg-black/40 rounded-lg relative border border-white/5 flex items-center justify-center overflow-hidden">
+                    <svg viewBox="0 0 1000 500" class="w-full h-full opacity-30 fill-gray-600 stroke-gray-800">
+                        <path d="M50,150 Q150,50 250,150 T450,150 T650,150 T850,150" fill="none" stroke-width="2"/> <rect x="100" y="100" width="200" height="150" rx="20" /> <rect x="350" y="100" width="150" height="100" rx="20" /> <rect x="550" y="100" width="300" height="200" rx="20" /> <rect x="380" y="250" width="150" height="150" rx="20" /> </svg>
+                    
+                    <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-10"></div>
+                    
+                    <div id="map-marker" class="map-dot" style="top: 50%; left: 50%;">
+                        <div class="map-ping"></div>
+                    </div>
+
+                    <div class="absolute bottom-4 left-4 text-xs font-mono text-gray-400 bg-black/80 p-2 rounded border border-white/10">
+                        LAT: <span id="geo-lat" class="text-white">--</span><br>
+                        LON: <span id="geo-lon" class="text-white">--</span><br>
+                        ISP: <span id="geo-isp" style="color: var(--primary)">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl">
+                <h3 class="text-xs font-bold text-red-500 uppercase mb-4 tracking-widest">
+                    <i class="fas fa-network-wired mr-2"></i>Attack Vectors
+                </h3>
+                <div class="h-64">
+                    <canvas id="protocolChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="glass-panel p-5 rounded-2xl">
+                <h3 class="text-xs font-bold text-red-500 uppercase mb-4 tracking-widest">
+                    <i class="fas fa-bullseye mr-2"></i>Internal Blast Radius
+                </h3>
+                <div class="space-y-3 font-mono text-xs">
+                    <div class="flex justify-between items-center group cursor-pointer hover:bg-white/5 p-2 rounded">
+                        <span class="text-gray-400"><i class="fas fa-database mr-2"></i>SQL_Prod_DB</span>
+                        <div class="w-24 h-1 bg-gray-800 rounded overflow-hidden">
+                            <div class="h-full bg-green-500 w-[90%]"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center group cursor-pointer hover:bg-white/5 p-2 rounded">
+                        <span class="text-gray-400"><i class="fas fa-server mr-2"></i>Auth_Gateway_01</span>
+                        <div class="w-24 h-1 bg-gray-800 rounded overflow-hidden">
+                            <div id="blast-gateway" class="h-full bg-green-500 w-[100%] transition-all duration-300"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center group cursor-pointer hover:bg-white/5 p-2 rounded">
+                        <span class="text-gray-400"><i class="fas fa-laptop-code mr-2"></i>Dev_Cluster_Alpha</span>
+                        <div class="w-24 h-1 bg-gray-800 rounded overflow-hidden">
+                            <div class="h-full bg-green-500 w-[98%]"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-red-900/20 border border-red-900/50 rounded text-red-300">
+                        <i class="fas fa-exclamation-triangle mr-1"></i> Alert: <span id="blast-msg">No active penetration</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-bold text-red-500 uppercase tracking-widest">Entropy vs Jitter</h3>
+                    <span class="text-[9px] px-2 py-1 rounded bg-red-500/10 text-red-500 border border-red-500/30">DEV_ONLY</span>
+                </div>
+                <div class="h-48 relative">
+                    <canvas id="chaosChart"></canvas>
+                </div>
+                <div class="mt-2 flex justify-between text-[10px] text-gray-500 font-mono">
+                    <span>Organic (Human)</span>
+                    <span>Synthetic (Bot)</span>
+                </div>
+            </div>
+
+            <div class="glass-panel p-5 rounded-2xl bg-black border-red-900/50">
+                <h3 class="text-xs font-bold text-red-500 uppercase mb-2 tracking-widest">
+                    <i class="fas fa-terminal mr-2"></i>Live Forensics
+                </h3>
+                <div id="console-log" class="font-mono text-[10px] text-gray-400 h-48 overflow-y-auto p-2 space-y-1">
+                    <p class="text-green-500">root@allsafe:~$ systemctl status defense-matrix</p>
+                    <p>● Active: running since Mon 2026-03-02</p>
+                    <p>Monitoring standard heuristics...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="h-10"></div> </div>
+
+    <script>
+        // --- CONFIG & STATE ---
+        let isDevMode = false;
+        let safeCount = 84392;
+        let blockCount = 1204;
+        let idx = 0;
+
+        // Simulated Database with Geo & Protocol Data
+        const db = [
+            { type: 'safe', ip: '192.168.1.45', country: 'US', isp: 'Comcast Cable', proto: 'HTTPS', lat: 30, left: 20 },
+            { type: 'safe', ip: '10.0.0.12', country: 'IN', isp: 'Jio Digital', proto: 'TCP', lat: 50, left: 70 },
+            { type: 'attack', ip: '45.22.11.90', country: 'RU', isp: 'Unknown VPN', proto: 'SSH', lat: 25, left: 60, attack: 'Brute Force' },
+            { type: 'safe', ip: '172.16.5.99', country: 'US', isp: 'AWS East', proto: 'API', lat: 32, left: 22 },
+            { type: 'attack', ip: '103.55.2.1', country: 'CN', isp: 'Chinanet', proto: 'SQL', lat: 45, left: 75, attack: 'SQL Injection' },
+            { type: 'safe', ip: '192.168.1.50', country: 'DE', isp: 'Deutsche Telekom', proto: 'HTTPS', lat: 35, left: 45 },
+            { type: 'attack', ip: '89.11.22.33', country: 'BR', isp: 'Claro S.A.', proto: 'ICMP', lat: 70, left: 30, attack: 'Ping Flood' }
+        ];
+
+        // --- CHART SETUP HELPERS ---
+        Chart.defaults.font.family = 'JetBrains Mono';
+        Chart.defaults.color = '#555';
+        
+        const commonOptions = (title, min, max, unit) => ({
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, title: { display: true, text: title, color: '#666', font: {size: 10} } },
+            scales: {
+                y: { min: min, max: max, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: unit } },
+                x: { display: false }
+            },
+            animation: { duration: 800 }
+        });
+
+        // 1. Voting Chart
+        const votingChart = new Chart(document.getElementById('votingChart'), {
+            type: 'bar',
+            data: { labels: ['RF', 'XGB', 'SVM'], datasets: [{ data: [0,0,0], backgroundColor: '#00f2ff', borderRadius: 4 }] },
+            options: { ...commonOptions('Model Confidence', 0, 100, '%'), indexAxis: 'y' } // Horizontal bars
+        });
+
+        // 2. Feature Charts (With CORRECT AXES)
+        // Jitter: 0-2s | Packet: 400-1500b | Flow: 0-15s
+        const jitterChart = new Chart(document.getElementById('jitterChart'), {
+            type: 'line', data: { labels: [1,2,3,4,5], datasets: [{ label: 'Live', data: [], borderColor: '#00f2ff', fill: true, backgroundColor: 'rgba(0,242,255,0.1)' }] },
+            options: commonOptions('Timing Jitter', 0, 2, 'Seconds')
+        });
+        
+        const packetChart = new Chart(document.getElementById('packetChart'), {
+            type: 'line', data: { labels: [1,2,3,4,5], datasets: [{ label: 'Live', data: [], borderColor: '#00f2ff', fill: true, backgroundColor: 'rgba(0,242,255,0.1)' }] },
+            options: commonOptions('Packet Size', 0, 1500, 'Bytes')
+        });
+
+        const flowChart = new Chart(document.getElementById('flowChart'), {
+            type: 'line', data: { labels: [1,2,3,4,5], datasets: [{ label: 'Live', data: [], borderColor: '#00f2ff', fill: true, backgroundColor: 'rgba(0,242,255,0.1)' }] },
+            options: commonOptions('Flow Duration', 0, 15, 'Seconds')
+        });
+
+        // 3. Dev Mode Charts
+        const protocolChart = new Chart(document.getElementById('protocolChart'), {
+            type: 'doughnut',
+            data: { labels: ['HTTPS', 'SSH', 'SQL', 'ICMP', 'Unk'], datasets: [{ data: [60, 5, 2, 10, 23], backgroundColor: ['#333', '#ff0040', '#ffaa00', '#00f2ff', '#555'], borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '70%' }
+        });
+
+        const chaosChart = new Chart(document.getElementById('chaosChart'), {
+            type: 'scatter',
+            data: { datasets: [{ data: [{x:0.2,y:0.8}], backgroundColor: '#ff0040' }] },
+            options: { scales: { x: {min:0, max:1}, y: {min:0, max:1} }, plugins: { legend: {display:false} } }
+        });
+
+        // --- LOGIC ENGINE ---
+
+        function toggleMode() {
+            isDevMode = !isDevMode;
+            const body = document.getElementById('app-body');
+            const btn = document.getElementById('mode-btn');
+            const dev = document.getElementById('dev-sections');
+
+            if(isDevMode) {
+                body.classList.add('theme-dev');
+                btn.innerHTML = "<i class='fas fa-shield-alt mr-2'></i>RETURN TO EXEC";
+                dev.classList.remove('hidden');
+                setTimeout(() => dev.classList.remove('opacity-0'), 50);
+                updateColor('#ff0040');
+            } else {
+                body.classList.remove('theme-dev');
+                btn.innerHTML = "<i class='fas fa-terminal mr-2'></i>ACTIVATE DEV MODE";
+                dev.classList.add('opacity-0');
+                setTimeout(() => dev.classList.add('hidden'), 700);
+                updateColor('#00f2ff');
+            }
+        }
+
+        function updateColor(color) {
+            votingChart.data.datasets[0].backgroundColor = color; votingChart.update();
+            [jitterChart, packetChart, flowChart].forEach(c => {
+                c.data.datasets[0].borderColor = color;
+                c.data.datasets[0].backgroundColor = color + '20'; // Hex opacity
+                c.update();
+            });
+        }
+
+        function logConsole(msg, isErr) {
+            const con = document.getElementById('console-log');
+            const p = document.createElement('p');
+            p.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            if(isErr) p.className = "text-red-400 font-bold";
+            con.prepend(p);
+        }
+
+        function runCycle() {
+            const data = db[idx];
+            const isAttack = data.type === 'attack';
+            const color = isDevMode ? '#ff0040' : '#00f2ff'; // Force refresh color
+
+            // 1. UI Text Updates
+            document.getElementById('target-ip').innerText = data.ip;
+            const verdict = document.getElementById('verdict-title');
+            verdict.innerText = isAttack ? "THREAT BLOCKED" : "TRAFFIC SECURE";
+            verdict.style.color = isAttack ? "#ff0040" : "#00ff88";
+            document.getElementById('verdict-desc').innerText = isAttack ? `DETECTED: ${data.attack}` : "Analysis: Human Baseline Confirmed";
+
+            if(isAttack) {
+                blockCount++; document.getElementById('count-blocked').innerText = blockCount.toLocaleString();
+                document.getElementById('blast-gateway').style.width = "40%"; // Simulate damage
+                document.getElementById('blast-gateway').classList.add('bg-red-500');
+                document.getElementById('blast-msg').innerText = "Gateway Under Load";
+                logConsole(`ALERT: ${data.attack} from ${data.ip} dropped.`, true);
+            } else {
+                safeCount++; document.getElementById('count-safe').innerText = safeCount.toLocaleString();
+                document.getElementById('blast-gateway').style.width = "100%";
+                document.getElementById('blast-gateway').classList.remove('bg-red-500');
+                document.getElementById('blast-msg').innerText = "No active penetration";
+            }
+
+            // 2. Map Marker Update
+            const mapDot = document.getElementById('map-marker');
+            mapDot.style.top = data.lat + "%";
+            mapDot.style.left = data.left + "%";
+            document.getElementById('geo-lat').innerText = data.lat + ".4201";
+            document.getElementById('geo-lon').innerText = data.left + ".9921";
+            document.getElementById('geo-isp').innerText = data.isp;
+
+            // 3. Truck Animation
+            const container = document.getElementById('packet-container');
+            const packet = document.createElement('div');
+            packet.className = `packet ${isAttack ? 'anim-block' : 'anim-safe'}`;
+            packet.innerHTML = '<i class="fas fa-truck-moving"></i>';
+            container.appendChild(packet);
+            setTimeout(() => packet.remove(), 3000);
+
+            // 4. GRAPH LOGIC (The Axes Fix)
+            
+            // JITTER (0-2s): Attack = LOW (Mechanical), Safe = HIGH (Organic)
+            const jitterVal = isAttack ? (Math.random() * 0.2) : (Math.random() * 1.0 + 0.5);
+            
+            // PACKET SIZE (0-1500b): Attack = HIGH (Payload), Safe = VARIED
+            const packetVal = isAttack ? (1000 + Math.random() * 400) : (200 + Math.random() * 300);
+
+            // FLOW DURATION (0-15s): Attack = LOW (Burst), Safe = HIGH (Session)
+            const flowVal = isAttack ? (Math.random() * 2) : (5 + Math.random() * 8);
+
+            // Update Arrays
+            [jitterChart, packetChart, flowChart].forEach(c => {
+                c.data.datasets[0].data.push(isAttack ? jitterVal : packetVal); // Temporary logic fix below
+                c.data.datasets[0].data.shift();
+            });
+
+            // Apply specific data to specific charts
+            jitterChart.data.datasets[0].data[4] = jitterVal; jitterChart.update();
+            packetChart.data.datasets[0].data[4] = packetVal; packetChart.update();
+            flowChart.data.datasets[0].data[4] = flowVal; flowChart.update();
+
+            // Voting Chart (High confidence for attacks)
+            const confidence = isAttack ? [98, 97, 99] : [12, 5, 8]; 
+            votingChart.data.datasets[0].data = confidence;
+            votingChart.update();
+            document.getElementById('mean-prob').innerText = ((confidence[0]+confidence[1]+confidence[2])/3).toFixed(1) + "%";
+
+            // Chaos Chart (Scatter)
+            chaosChart.data.datasets[0].data = Array.from({length: 10}, () => ({
+                x: isAttack ? Math.random() * 0.2 : Math.random(), // Low entropy x for bots
+                y: isAttack ? Math.random() : Math.random() * 0.2  // High jitter y for bots? (Abstract viz)
+            }));
+            chaosChart.update();
+
+            // Loop
+            idx = (idx + 1) % db.length;
+        }
+
+        // Initialize dummy data for lines
+        [jitterChart, packetChart, flowChart].forEach(c => {
+            c.data.datasets[0].data = [0,0,0,0,0];
+        });
+
+        // Start System
+        setInterval(runCycle, 2500);
+        runCycle();
+
+    </script>
+</body>
+</html>
